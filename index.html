@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>高度POSレジ システム（連続運用対応版）</title>
+    <style>
+        :root {
+            --bg-color: #1e293b;
+            --panel-bg: #0f172a;
+            --text-color: #f8fafc;
+            --accent-color: #3b82f6;
+            --danger-color: #ef4444;
+            --success-color: #10b981;
+            --warn-color: #f59e0b;
+            --discount-color: #b45309;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
+        body { background-color: var(--bg-color); color: var(--text-color); height: 100vh; overflow: hidden; }
+
+        .screen { display: none; height: 100vh; width: 100vw; flex-direction: column; }
+        .screen.active { display: flex; }
+
+        /* --- 1. ログイン画面 --- */
+        #login-screen { justify-content: center; align-items: center; background-color: var(--panel-bg); }
+        .login-container { text-align: center; background: #334155; padding: 30px; border-radius: 12px; width: 350px; }
+        #staff-id-display { width: 100%; padding: 15px; font-size: 2rem; text-align: center; margin-bottom: 20px; border: none; border-radius: 6px; background: #1e293b; color: #fff; }
+        .keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+        .keypad button { padding: 20px; font-size: 1.5rem; border: none; border-radius: 8px; background: #475569; color: white; cursor: pointer; }
+        .keypad button:active { opacity: 0.8; }
+        .keypad .enter-btn { background: var(--accent-color); grid-column: span 3; }
+
+        /* --- 2. メイン画面 --- */
+        #main-screen { flex-direction: row; }
+        /* 左：カート */
+        .cart-section { flex: 1; background: var(--panel-bg); border-right: 2px solid #334155; display: flex; flex-direction: column; min-width: 400px; }
+        .cart-header { padding: 15px 20px; border-bottom: 1px solid #334155; font-weight: bold; display: flex; justify-content: space-between; align-items: center; }
+        .cart-header-left { display: flex; flex-direction: column; gap: 2px; }
+        .logout-btn { background: #475569; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 0.85rem; font-weight: normal; }
+        .logout-btn:hover { background: var(--danger-color); }
+        
+        .cart-list { flex: 1; overflow-y: auto; padding: 10px; }
+        
+        .cart-item { display: flex; justify-content: space-between; align-items: center; background: #1e293b; padding: 12px; border-radius: 6px; margin-bottom: 8px; border-left: 5px solid var(--accent-color); }
+        .cart-item.type-discount { border-left: 5px solid var(--discount-color); background: #292524; }
+        
+        .cart-item-detail { display: flex; flex-direction: column; gap: 4px; }
+        .cart-item-subtotal { font-weight: bold; color: #cbd5e1; }
+        .cart-item.type-discount .cart-item-subtotal { color: #fdba74; }
+
+        .cart-summary { padding: 20px; background: #1e293b; border-top: 2px solid #475569; }
+        .summary-row { display: flex; justify-content: space-between; margin-bottom: 5px; }
+        .total-row { font-size: 1.5rem; color: var(--warn-color); font-weight: bold; margin-top: 10px; }
+        .checkout-btn { width: 100%; padding: 15px; background: var(--success-color); border: none; color: white; font-size: 1.2rem; border-radius: 8px; cursor: pointer; margin-top: 10px; }
+
+        /* 右：メニュー */
+        .menu-section { flex: 2; display: flex; flex-direction: column; padding: 20px; height: 100%; overflow: hidden; }
+        .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+        .tab-btn { padding: 12px 24px; background: #334155; border: none; color: white; border-radius: 6px; cursor: pointer; font-size: 1rem; }
+        .tab-btn.active { background: var(--accent-color); font-weight: bold; }
+        .item-grid { display: none; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 15px; overflow-y: auto; flex: 1; padding-bottom: 20px; }
+        .item-grid.active { display: grid; }
+        .item-btn { background: #334155; border: none; color: white; padding: 22px 10px; border-radius: 8px; cursor: pointer; font-size: 0.95rem; display: flex; flex-direction: column; gap: 8px; align-items: center; justify-content: center; text-align: center; height: 100px;}
+        .item-btn:active { opacity: 0.7; }
+        .discount-op { background: var(--discount-color); }
+        .discount-op:active { background: #d97706; }
+
+        /* --- モーダル共通設定 --- */
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.7); justify-content: center; align-items: center; z-index: 1000; }
+        .modal-overlay.active { display: flex; }
+        .qty-modal { background: #334155; padding: 25px; border-radius: 12px; width: 340px; text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+        .qty-display { width: 100%; padding: 10px; font-size: 2rem; text-align: center; margin-bottom: 15px; border: none; border-radius: 6px; background: #1e293b; color: white; }
+
+        /* --- 3. 決済方法画面 --- */
+        #payment-method-screen { justify-content: center; align-items: center; gap: 30px; }
+        .method-group { display: flex; gap: 20px; }
+        .method-btn { width: 220px; height: 160px; background: #334155; color: white; border: none; border-radius: 12px; font-size: 1.3rem; cursor: pointer; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 15px; }
+
+        /* --- 4. 決済実行画面 --- */
+        #checkout-screen { justify-content: center; align-items: center; }
+        .modal-box { background: #334155; padding: 30px; border-radius: 12px; width: 440px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+        .modal-box h3 { margin-bottom: 15px; text-align: center; }
+        .modal-box input.display-input { width: 100%; padding: 12px; margin: 10px 0; font-size: 1.8rem; background: #1e293b; color: white; border: none; text-align: right; border-radius: 6px; }
+        .btn-group { display: flex; gap: 15px; margin-top: 20px; }
+        .btn-group button { flex: 1; padding: 15px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 1rem; }
+
+        /* 現金用テンキーの拡張スタイル */
+        .cash-keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 15px; }
+        .cash-keypad button { padding: 15px; font-size: 1.3rem; border: none; border-radius: 6px; background: #475569; color: white; cursor: pointer; }
+        .cash-keypad button:active { opacity: 0.8; }
+
+        /* --- 印刷用設定 --- */
+        @media print {
+            body * { display: none !important; }
+            #receipt-area, #receipt-area * { display: block !important; }
+            #receipt-area { position: absolute; left: 0; top: 0; width: 100%; color: black; background: white; padding: 40px; font-family: monospace; line-height: 1.5; font-size: 14px; }
+        }
+        #receipt-area { display: none; }
+    </style>
+</head>
+<body>
+
+    <div id="login-screen" class="screen active">
+        <div class="login-container">
+            <h3 style="margin-bottom: 15px;">社員IDを入力してください</h3>
+            <input type="password" id="staff-id-display" readonly placeholder="****">
+            <div class="keypad">
+                <button onclick="pressLoginKey('1')">1</button><button onclick="pressLoginKey('2')">2</button><button onclick="pressLoginKey('3')">3</button>
+                <button onclick="pressLoginKey('4')">4</button><button onclick="pressLoginKey('5')">5</button><button onclick="pressLoginKey('6')">6</button>
+                <button onclick="pressLoginKey('7')">7</button><button onclick="pressLoginKey('8')">8</button><button onclick="pressLoginKey('9')">9</button>
+                <button onclick="pressLoginKey('C')">C</button><button onclick="pressLoginKey('0')">0</button>
+                <button class="enter-btn" onclick="doLogin()">ログイン</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="main-screen" class="screen">
+        <div class="cart-section">
+            <div class="cart-header">
+                <div class="cart-header-left">
+                    <span>登録商品・明細一覧</span>
+                    <small id="op-name" style="color: #94a3b8;"></small>
+                </div>
+                <button class="logout-btn" onclick="doLogout()">ログアウト</button>
+            </div>
+            <div id="cart-list" class="cart-list"></div>
+            <div class="cart-summary">
+                <div class="summary-row"><span>合計原価（商品計）</span><span id="sum-subtotal">¥0</span></div>
+                <div class="summary-row total-row"><span>差引お支払い合計</span><span id="sum-total">¥0</span></div>
+                <button class="checkout-btn" onclick="showPaymentMethods()">決済手続き</button>
+            </div>
+        </div>
+        <div class="menu-section">
+            <div class="tabs">
+                <button class="tab-btn active" onclick="switchTab('vege', this)">野菜</button>
+                <button class="tab-btn" onclick="switchTab('spice', this)">香辛料</button>
+                <button class="tab-btn" onclick="switchTab('fried', this)">揚げ物</button>
+                <button class="tab-btn" onclick="switchTab('disc', this)">▼ 割引・値引</button>
+            </div>
+
+            <div id="tab-vege" class="item-grid active">
+                <button class="item-btn" onclick="openQtyModal('キャベツ', 180)"><span>キャベツ</span><span>¥180</span></button>
+                <button class="item-btn" onclick="openQtyModal('レタス', 220)"><span>レタス</span><span>¥220</span></button>
+                <button class="item-btn" onclick="openQtyModal('トマト', 130)"><span>トマト</span><span>¥130</span></button>
+                <button class="item-btn" onclick="openQtyModal('玉ねぎ', 90)"><span>玉ねぎ</span><span>¥90</span></button>
+                <button class="item-btn" onclick="openQtyModal('じゃがいも', 80)"><span>じゃがいも</span><span>¥80</span></button>
+                <button class="item-btn" onclick="openQtyModal('人参', 70)"><span>人参</span><span>¥70</span></button>
+                <button class="item-btn" onclick="openQtyModal('きゅうり', 60)"><span>きゅうり</span><span>¥60</span></button>
+                <button class="item-btn" onclick="openQtyModal('大根', 150)"><span>大根</span><span>¥150</span></button>
+            </div>
+
+            <div id="tab-spice" class="item-grid">
+                <button class="item-btn" onclick="openQtyModal('黒胡椒', 320)"><span>黒胡椒</span><span>¥320</span></button>
+                <button class="item-btn" onclick="openQtyModal('一味唐辛子', 250)"><span>一味唐辛子</span><span>¥250</span></button>
+                <button class="item-btn" onclick="openQtyModal('カレー粉', 450)"><span>カレー粉</span><span>¥450</span></button>
+                <button class="item-btn" onclick="openQtyModal('チューブ生姜', 180)"><span>チューブ生姜</span><span>¥180</span></button>
+            </div>
+
+            <div id="tab-fried" class="item-grid">
+                <button class="item-btn" onclick="openQtyModal('若鶏唐揚げ(1個)', 80)"><span>若鶏唐揚げ</span><span>¥80</span></button>
+                <button class="item-btn" onclick="openQtyModal('ポテトフライ', 200)"><span>ポテトフライ</span><span>¥200</span></button>
+                <button class="item-btn" onclick="openQtyModal('牛肉コロッケ', 120)"><span>牛肉コロッケ</span><span>¥120</span></button>
+                <button class="item-btn" onclick="openQtyModal('メンチカツ', 160)"><span>メンチカツ</span><span>¥160</span></button>
+            </div>
+
+            <div id="tab-disc" class="item-grid">
+                <button class="item-btn discount-op" onclick="addDiscountToCart('percent', 5, '5% 割引')"><span>5% 割引</span></button>
+                <button class="item-btn discount-op" onclick="addDiscountToCart('percent', 10, '10% 割引')"><span>10% 割引</span></button>
+                <button class="item-btn discount-op" onclick="addDiscountToCart('percent', 50, '半額 (50%)')"><span>半額 (50%)</span></button>
+                <button class="item-btn discount-op" onclick="addDiscountToCart('fixed', 100, '100円 引き')"><span>100円 引き</span></button>
+                <button class="item-btn discount-op" onclick="addDiscountToCart('fixed', 500, '500円 引き')"><span>500円 引き</span></button>
+                <button class="item-btn discount-op" onclick="openCustomDiscountModal()" style="background: #9a3412;"><span>💰 金額指定</span></button>
+            </div>
+        </div>
+    </div>
+
+    <div id="qty-modal-overlay" class="modal-overlay">
+        <div class="qty-modal">
+            <h3 id="qty-modal-title" style="margin-bottom:10px;">商品名</h3>
+            <input type="number" id="qty-display" class="qty-display" readonly value="1">
+            <div class="keypad">
+                <button onclick="pressQtyKey('1')">1</button><button onclick="pressQtyKey('2')">2</button><button onclick="pressQtyKey('3')">3</button>
+                <button onclick="pressQtyKey('4')">4</button><button onclick="pressQtyKey('5')">5</button><button onclick="pressQtyKey('6')">6</button>
+                <button onclick="pressQtyKey('7')">7</button><button onclick="pressQtyKey('8')">8</button><button onclick="pressQtyKey('9')">9</button>
+                <button onclick="pressQtyKey('C')">C</button><button onclick="pressQtyKey('0')">0</button>
+                <button onclick="closeQtyModal()" style="background:#64748b;">キャンセル</button>
+                <button class="enter-btn" onclick="confirmQtyAndAdd()" style="background:var(--success-color);">数量決定・追加</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="discount-modal-overlay" class="modal-overlay">
+        <div class="qty-modal">
+            <h3>値引き金額を入力</h3>
+            <input type="number" id="discount-input-display" class="qty-display" readonly value="">
+            <div class="keypad">
+                <button onclick="pressDiscountKey('1')">1</button><button onclick="pressDiscountKey('2')">2</button><button onclick="pressDiscountKey('3')">3</button>
+                <button onclick="pressDiscountKey('4')">4</button><button onclick="pressDiscountKey('5')">5</button><button onclick="pressDiscountKey('6')">6</button>
+                <button onclick="pressDiscountKey('7')">7</button><button onclick="pressDiscountKey('8')">8</button><button onclick="pressDiscountKey('9')">9</button>
+                <button onclick="pressDiscountKey('C')">C</button><button onclick="pressDiscountKey('0')">0</button>
+                <button onclick="closeCustomDiscountModal()" style="background:#64748b;">戻る</button>
+                <button class="enter-btn" onclick="confirmCustomDiscount()" style="background:var(--warn-color);">値引き適用</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="payment-method-screen" class="screen">
+        <h2>決済方法を選択してください</h2>
+        <div class="method-group">
+            <button class="method-btn" onclick="startPay('cash')"><span>💴</span>現金決済</button>
+            <button class="method-btn" onclick="startPay('id')"><span>📝</span>決済ID発行<br>(後払い)</button>
+        </div>
+        <button onclick="changeScreen('main-screen')" style="margin-top:20px; background:none; border:1px solid white; color:white; padding:10px 20px; border-radius:6px; cursor:pointer;">レジ画面に戻る</button>
+    </div>
+
+    <div id="checkout-screen" class="screen">
+        <div id="cash-panel" class="modal-box" style="display:none;">
+            <h3>現金会計</h3>
+            <p style="font-size:1.1rem; margin-top:5px; text-align: center;">お支払い合計: <strong id="cash-total-text" style="font-size:1.4rem; color:var(--warn-color);"></strong></p>
+            
+            <input type="text" id="cash-receive" class="display-input" placeholder="¥0" readonly>
+            
+            <div class="cash-keypad">
+                <button onclick="pressCashKey('1')">1</button><button onclick="pressCashKey('2')">2</button><button onclick="pressCashKey('3')">3</button>
+                <button onclick="pressCashKey('4')">4</button><button onclick="pressCashKey('5')">5</button><button onclick="pressCashKey('6')">6</button>
+                <button onclick="pressCashKey('7')">7</button><button onclick="pressCashKey('8')">8</button><button onclick="pressCashKey('9')">9</button>
+                <button onclick="pressCashKey('C')" style="background:var(--danger-color);">C</button><button onclick="pressCashKey('0')">0</button><button onclick="pressCashKey('00')">00</button>
+            </div>
+
+            <p style="margin-top:15px; text-align:center; font-size:1.2rem;">お釣り: <strong id="cash-change" style="color:var(--success-color); font-size:1.8rem;">¥0</strong></p>
+            
+            <div class="btn-group">
+                <button onclick="changeScreen('payment-method-screen')" style="background:#64748b; color:white;">キャンセル</button>
+                <button class="enter-btn" onclick="complete('cash')" style="background:var(--success-color); color:white;">精算確定(PDF保存)</button>
+            </div>
+        </div>
+
+        <div id="id-panel" class="modal-box" style="display:none;">
+            <h3>後払い申請確認</h3>
+            <div style="background:#1e293b; padding:15px; border-radius:6px; margin:15px 0; display:flex; flex-direction:column; gap:10px;">
+                <p>決済ID: <strong id="display-pay-id" style="color:var(--accent-color);"></strong></p>
+                <p>申請日: <span id="display-pay-date"></span></p>
+                <p>ご請求合計: <strong id="id-total-text" style="color:var(--warn-color);"></strong></p>
+            </div>
+            <div class="btn-group">
+                <button onclick="changeScreen('payment-method-screen')" style="background:#64748b; color:white;">戻る</button>
+                <button class="enter-btn" onclick="complete('id')" style="background:var(--accent-color); color:white;">ID確定(PDF保存)</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="receipt-area"></div>
+
+    <script>
+        let staffId = "";
+        let cart = [];
+        let payType = "";
+
+        let selectedItemName = "";
+        let selectedItemPrice = "";
+        let currentQtyInput = "1";
+        let currentDiscountInput = "";
+        let currentCashInput = "";
+
+        function changeScreen(id) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+        }
+
+        // --- 1. ログイン & ログアウト ---
+        function pressLoginKey(k) {
+            const d = document.getElementById('staff-id-display');
+            if (k === 'C') staffId = "";
+            else if (staffId.length < 4) staffId += k;
+            d.value = staffId;
+        }
+        function doLogin() {
+            if (!staffId) return alert("IDを入力してください");
+            document.getElementById('op-name').innerText = `[担当者ID: ${staffId}]`;
+            changeScreen('main-screen');
+        }
+        function doLogout() {
+            if (cart.length > 0 && !confirm("取引中の商品がありますが、ログアウトしますか？")) return;
+            cart = [];
+            staffId = "";
+            document.getElementById('staff-id-display').value = "";
+            renderCart();
+            changeScreen('login-screen');
+        }
+
+        // --- 2. カテゴリ切り替え ---
+        function switchTab(tab, btn) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            document.querySelectorAll('.item-grid').forEach(g => g.classList.remove('active'));
+            document.getElementById('tab-' + tab).classList.add('active');
+        }
+
+        // --- 数量選択モーダル ---
+        function openQtyModal(name, price) {
+            selectedItemName = name;
+            selectedItemPrice = price;
+            currentQtyInput = "1";
+            document.getElementById('qty-display').value = currentQtyInput;
+            document.getElementById('qty-modal-title').innerText = `${name} (¥${price}/個)`;
+            document.getElementById('qty-modal-overlay').classList.add('active');
+        }
+        function pressQtyKey(k) {
+            if (k === 'C') currentQtyInput = "";
+            else {
+                if (currentQtyInput === "1" && k !== '0') currentQtyInput = k;
+                else currentQtyInput += k;
+            }
+            document.getElementById('qty-display').value = currentQtyInput || 0;
+        }
+        function closeQtyModal() {
+            document.getElementById('qty-modal-overlay').classList.remove('active');
+        }
+        function confirmQtyAndAdd() {
+            const qty = parseInt(currentQtyInput) || 0;
+            if (qty <= 0) return alert("数量は1以上を入力してください");
+            
+            cart.push({
+                type: 'product',
+                name: selectedItemName,
+                price: selectedItemPrice,
+                qty: qty,
+                uid: Date.now()
+            });
+            closeQtyModal();
+            renderCart();
+        }
+
+        // --- 割引処理 ---
+        function addDiscountToCart(discountType, value, labelName) {
+            let currentTotal = calculateCurrentTotal();
+            if (currentTotal <= 0) return alert("割引を適用する対象商品（金額）がありません");
+
+            cart.push({
+                type: 'discount',
+                name: labelName,
+                discountType: discountType,
+                discountValue: value,
+                uid: Date.now()
+            });
+            renderCart();
+        }
+
+        function openCustomDiscountModal() {
+            if (calculateCurrentTotal() <= 0) return alert("割引を適用する対象商品がありません");
+            currentDiscountInput = "";
+            document.getElementById('discount-input-display').value = "";
+            document.getElementById('discount-modal-overlay').classList.add('active');
+        }
+        function pressDiscountKey(k) {
+            if (k === 'C') currentDiscountInput = "";
+            else currentDiscountInput += k;
+            document.getElementById('discount-input-display').value = currentDiscountInput;
+        }
+        function closeCustomDiscountModal() {
+            document.getElementById('discount-modal-overlay').classList.remove('active');
+        }
+        function confirmCustomDiscount() {
+            const val = parseInt(currentDiscountInput) || 0;
+            if (val <= 0) return alert("正しい金額を入力してください");
+            if (val > calculateCurrentTotal()) return alert("現在の合計金額を超える値引きはできません");
+            
+            addDiscountToCart('fixed', val, `${val}円 指定値引き`);
+            closeCustomDiscountModal();
+        }
+
+        function removeItem(uid) {
+            cart = cart.filter(i => i.uid !== uid);
+            renderCart();
+        }
+
+        function calculateCurrentTotal() {
+            let runningTotal = 0;
+            cart.forEach(item => {
+                if (item.type === 'product') {
+                    runningTotal += (item.price * item.qty);
+                } else if (item.type === 'discount') {
+                    if (item.discountType === 'percent') {
+                        runningTotal -= Math.floor(runningTotal * (item.discountValue / 100));
+                    } else if (item.discountType === 'fixed') {
+                        runningTotal -= item.discountValue;
+                    }
+                }
+            });
+            return Math.max(0, runningTotal);
+        }
+
+        function renderCart() {
+            const list = document.getElementById('cart-list');
+            list.innerHTML = "";
+            let runningTotal = 0;
+            let productSubtotal = 0;
+            
+            cart.forEach(item => {
+                let displayPriceText = "";
+                let itemClass = "cart-item";
+
+                if (item.type === 'product') {
+                    let itemSub = item.price * item.qty;
+                    runningTotal += itemSub;
+                    productSubtotal += itemSub;
+                    displayPriceText = `¥${itemSub.toLocaleString()}`;
+                    
+                    list.innerHTML += `
+                        <div class="${itemClass} type-product">
+                            <div class="cart-item-detail">
+                                <span style="font-weight:bold;">${item.name}</span>
+                                <span style="font-size:0.85rem; color:#94a3b8;">¥${item.price} × ${item.qty}</span>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:10px;">
+                                <span class="cart-item-subtotal">${displayPriceText}</span>
+                                <button onclick="removeItem(${item.uid})" style="background:var(--danger-color); color:white; border:none; padding:6px 10px; border-radius:4px; cursor:pointer;">削除</button>
+                            </div>
+                        </div>`;
+                } 
+                else if (item.type === 'discount') {
+                    itemClass += " type-discount";
+                    let discountAmount = 0;
+                    if (item.discountType === 'percent') {
+                        discountAmount = Math.floor(runningTotal * (item.discountValue / 100));
+                    } else if (item.discountType === 'fixed') {
+                        discountAmount = item.discountValue;
+                    }
+                    runningTotal -= discountAmount;
+                    displayPriceText = `-¥${discountAmount.toLocaleString()}`;
+
+                    list.innerHTML += `
+                        <div class="${itemClass}">
+                            <div class="cart-item-detail">
+                                <span style="font-weight:bold; color:#fdba74;">${item.name}</span>
+                                <span style="font-size:0.85rem; color:#a8a29e;">適応時の小計から差し引き</span>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:10px;">
+                                <span class="cart-item-subtotal">${displayPriceText}</span>
+                                <button onclick="removeItem(${item.uid})" style="background:var(--danger-color); color:white; border:none; padding:6px 10px; border-radius:4px; cursor:pointer;">削除</button>
+                            </div>
+                        </div>`;
+                }
+            });
+            
+            document.getElementById('sum-subtotal').innerText = "¥" + productSubtotal.toLocaleString();
+            document.getElementById('sum-total').innerText = "¥" + Math.max(0, runningTotal).toLocaleString();
+        }
+
+        // --- 3. 決済画面の立ち上げ ---
+        function showPaymentMethods() {
+            if (cart.filter(i => i.type === 'product').length === 0) return alert("商品が登録されていません");
+            changeScreen('payment-method-screen');
+        }
+
+        function startPay(type) {
+            payType = type;
+            changeScreen('checkout-screen');
+            const total = document.getElementById('sum-total').innerText;
+            
+            if (type === 'cash') {
+                document.getElementById('cash-panel').style.display = 'block';
+                document.getElementById('id-panel').style.display = 'none';
+                document.getElementById('cash-total-text').innerText = total;
+                currentCashInput = "";
+                document.getElementById('cash-receive').value = "¥0";
+                document.getElementById('cash-change').innerText = "¥0";
+            } else {
+                document.getElementById('cash-panel').style.display = 'none';
+                document.getElementById('id-panel').style.display = 'block';
+                document.getElementById('id-total-text').innerText = total;
+                document.getElementById('display-pay-id').innerText = "PAY-" + Date.now().toString().slice(-6);
+                document.getElementById('display-pay-date').innerText = new Date().toLocaleDateString();
+            }
+        }
+
+        function pressCashKey(k) {
+            if (k === 'C') {
+                currentCashInput = "";
+            } else {
+                if (currentCashInput === "" && (k === '0' || k === '00')) return;
+                currentCashInput += k;
+            }
+            const numValue = parseInt(currentCashInput) || 0;
+            document.getElementById('cash-receive').value = "¥" + numValue.toLocaleString();
+            calcChange(numValue);
+        }
+
+        function calcChange(receiveValue) {
+            const total = parseInt(document.getElementById('sum-total').innerText.replace(/[^0-9]/g, ""));
+            const change = Math.max(0, receiveValue - total);
+            document.getElementById('cash-change').innerText = "¥" + change.toLocaleString();
+        }
+
+        // --- 4. 精算処理 (完了後はメイン画面へ) ---
+        function complete(type) {
+            const totalAmount = parseInt(document.getElementById('sum-total').innerText.replace(/[^0-9]/g, ""));
+            const receiveAmount = parseInt(currentCashInput) || 0;
+
+            if (type === 'cash' && receiveAmount < totalAmount) {
+                return alert("お預かり金額が合計金額に満たしていません。");
+            }
+
+            const area = document.getElementById('receipt-area');
+            const date = new Date().toLocaleString();
+            
+            let html = `<h1>【POSレジ領収書】</h1><p>発行日時: ${date}</p><p>レジ担当: ${staffId}</p><hr style="margin:10px 0;">`;
+            
+            let runningTotal = 0;
+            cart.forEach(item => {
+                if (item.type === 'product') {
+                    let sub = item.price * item.qty;
+                    runningTotal += sub;
+                    html += `<p>${item.name} (¥${item.price}) × ${item.qty} : ¥${sub.toLocaleString()}</p>`;
+                } else {
+                    let disc = 0;
+                    if (item.discountType === 'percent') disc = Math.floor(runningTotal * (item.discountValue / 100));
+                    else disc = item.discountValue;
+                    runningTotal -= disc;
+                    html += `<p style="color:#555;">┗ ${item.name} : -¥${disc.toLocaleString()}</p>`;
+                }
+            });
+            
+            html += `<hr style="margin:10px 0;">`;
+            html += `<h2>最終お支払い合計: ¥${Math.max(0, runningTotal).toLocaleString()}</h2>`;
+            
+            if (type === 'cash') {
+                html += `<p>お預かり: ¥${receiveAmount.toLocaleString()}</p>`;
+                html += `<p>お釣り: ${document.getElementById('cash-change').innerText}</p>`;
+            } else if (type === 'id') {
+                html += `<br><h3>【後払い受領書】</h3>`;
+                html += `<p>決済ID: ${document.getElementById('display-pay-id').innerText}</p>`;
+                html += `<p>申請日: ${document.getElementById('display-pay-date').innerText}</p>`;
+            }
+            
+            area.innerHTML = html;
+            window.print();
+            
+            // ★【変更箇所】staffId は維持し、カートと一時入力のみリセットしてメイン画面へ戻る
+            cart = []; 
+            currentCashInput = "";
+            renderCart();
+            changeScreen('main-screen');
+        }
+    </script>
+</body>
+</html>
