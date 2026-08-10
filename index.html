@@ -138,6 +138,7 @@
                 <button class="tab-btn" onclick="switchTab('fried', this)">文房具系</button>
                 <button class="tab-btn" onclick="switchTab('other', this)">その他</button>
                 <button class="tab-btn" onclick="switchTab('disc', this)">▼ 割引・値引</button>
+                <button class="tab-btn" onclick="switchTab('custom', this)">特殊処理</button>
             </div>
 
             <div id="tab-vege" class="item-grid active">
@@ -189,18 +190,24 @@
             </div>
 
             <div id="tab-other" class="item-grid">
-                <button class="item-btn" onclick="openQtyModal('有料袋（小）', 700)"><span>有料袋（小）</span><span>¥700</span></button>
-                <button class="item-btn" onclick="openQtyModal('有料袋（中）', 1000)"><span>有料袋（中）</span><span>¥1,000</span></button>
-                <button class="item-btn" onclick="openQtyModal('有料袋（大）', 1500)"><span>有料袋（大）</span><span>¥1,500</span></button>
+                <button class="item-btn" onclick="openQtyModal('有料袋（小）', 700)"><span>有料袋（小）</span><span>¥5</span></button>
+                <button class="item-btn" onclick="openQtyModal('有料袋（中）', 1000)"><span>有料袋（中）</span><span>¥10</span></button>
+                <button class="item-btn" onclick="openQtyModal('有料袋（大）', 1500)"><span>有料袋（大）</span><span>¥15</span></button>
             </div>
 
             <div id="tab-disc" class="item-grid">
                 <button class="item-btn discount-op" onclick="addDiscountToCart('percent', 5, '5% OFF')"><span>5% OFF</span></button>
                 <button class="item-btn discount-op" onclick="addDiscountToCart('percent', 10, '10% OFF')"><span>10% OFF</span></button>
+                <button class="item-btn discount-op" onclick="addDiscountToCart('percent', 20, '20% OFF')"><span>社員割引(20%)</span></button>
                 <button class="item-btn discount-op" onclick="addDiscountToCart('percent', 50, '半額 (50%)')"><span>半額 (50%)</span></button>
                 <button class="item-btn discount-op" onclick="addDiscountToCart('fixed', 100, '100円 OFF')"><span>100円 OFF</span></button>
                 <button class="item-btn discount-op" onclick="addDiscountToCart('fixed', 500, '500円 OFF')"><span>500円 OFF</span></button>
                 <button class="item-btn discount-op" onclick="openCustomDiscountModal()" style="background: #9a3412;"><span>💰 金額指定</span></button>
+            </div>
+
+            <div id="tab-custom" class="item-grid">
+                <button class="item-btn" onclick="addAllProducts()" style="background: #2563eb;"><span>📦 全商品を追加</span></button>
+                <button class="item-btn" onclick="openCustomPriceModal()" style="background: #9a3412;"><span>💰 金額指定商品</span></button>
             </div>
         </div>
     </div>
@@ -231,6 +238,21 @@
                 <button onclick="pressDiscountKey('C')">C</button><button onclick="pressDiscountKey('0')">0</button>
                 <button onclick="closeCustomDiscountModal()" style="background:#64748b;">戻る</button>
                 <button class="enter-btn" onclick="confirmCustomDiscount()" style="background:var(--warn-color);">値引き適用</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="custom-price-modal-overlay" class="modal-overlay">
+        <div class="qty-modal">
+            <h3>金額を指定してください</h3>
+            <input type="number" id="custom-price-input-display" class="qty-display" readonly value="">
+            <div class="keypad">
+                <button onclick="pressCustomPriceKey('1')">1</button><button onclick="pressCustomPriceKey('2')">2</button><button onclick="pressCustomPriceKey('3')">3</button>
+                <button onclick="pressCustomPriceKey('4')">4</button><button onclick="pressCustomPriceKey('5')">5</button><button onclick="pressCustomPriceKey('6')">6</button>
+                <button onclick="pressCustomPriceKey('7')">7</button><button onclick="pressCustomPriceKey('8')">8</button><button onclick="pressCustomPriceKey('9')">9</button>
+                <button onclick="pressCustomPriceKey('C')">C</button><button onclick="pressCustomPriceKey('0')">0</button>
+                <button onclick="closeCustomPriceModal()" style="background:#64748b;">戻る</button>
+                <button class="enter-btn" onclick="confirmCustomPriceProduct()" style="background:var(--accent-color);">商品追加</button>
             </div>
         </div>
     </div>
@@ -299,6 +321,7 @@
         let selectedItemPrice = "";
         let currentQtyInput = "1";
         let currentDiscountInput = "";
+        let currentCustomPriceInput = "";
         let currentCashInput = "";
 
         function changeScreen(id) {
@@ -364,9 +387,66 @@
                 name: selectedItemName,
                 price: selectedItemPrice,
                 qty: qty,
-                uid: Date.now()
+                uid: Date.now() + Math.random()
             });
             closeQtyModal();
+            renderCart();
+        }
+
+        function addAllProducts() {
+            const allProducts = [
+                { name: 'ロゴTシャツA', price: 2500 },
+                { name: 'ロゴTシャツB', price: 2500 },
+                { name: 'ロゴTシャツC', price: 2500 },
+                { name: 'プリントTシャツA', price: 2800 },
+                { name: 'プリントTシャツB', price: 2800 },
+                { name: '長袖TシャツA', price: 3200 },
+                { name: '長袖TシャツB', price: 3200 },
+                { name: 'パーカーA', price: 4500 },
+                { name: 'パーカーB', price: 4500 },
+                { name: 'スウェットA', price: 4200 },
+                { name: 'スウェットB', price: 4200 },
+                { name: 'タンクトップA', price: 1900 },
+                { name: 'タンクトップB', price: 1900 },
+                { name: 'キャップ2026', price: 1800 },
+                { name: 'キャップ2025', price: 1800 },
+                { name: 'トートバッグA', price: 1600 },
+                { name: 'トートバッグB', price: 1600 },
+                { name: 'キーホルダーA', price: 600 },
+                { name: 'キーホルダーB', price: 600 },
+                { name: 'アクリルスタンドA', price: 1200 },
+                { name: 'アクリルスタンドB', price: 1200 },
+                { name: 'ラバーリング2026', price: 800 },
+                { name: 'ラバーリング2025', price: 800 },
+                { name: 'ピンバッジA', price: 500 },
+                { name: 'ピンバッジB', price: 500 },
+                { name: 'エコバッグ', price: 1200 },
+                { name: 'ステンレスボトル', price: 2800 },
+                { name: 'ミニタオル', price: 450 },
+                { name: 'スマホリング', price: 950 },
+                { name: 'パスケース', price: 1300 },
+                { name: 'ノートセット', price: 900 },
+                { name: 'ステッカーセットA', price: 700 },
+                { name: 'ステッカーセットB', price: 700 },
+                { name: 'ペン4本セットA', price: 850 },
+                { name: 'ペン4本セットB', price: 850 },
+                { name: 'マスキングテープA', price: 650 },
+                { name: 'マスキングテープB', price: 650 },
+                { name: 'クリアファイルA', price: 550 },
+                { name: 'クリアファイルB', price: 550 },
+                { name: '有料袋（小）', price: 700 },
+                { name: '有料袋（中）', price: 1000 },
+                { name: '有料袋（大）', price: 1500 }
+            ];
+            allProducts.forEach(product => {
+                cart.push({
+                    type: 'product',
+                    name: product.name,
+                    price: product.price,
+                    qty: 1,
+                    uid: Date.now() + Math.random()
+                });
+            });
             renderCart();
         }
 
@@ -406,6 +486,34 @@
             
             addDiscountToCart('fixed', val, `${val}円 指定値引き`);
             closeCustomDiscountModal();
+        }
+
+        function openCustomPriceModal() {
+            currentCustomPriceInput = "";
+            document.getElementById('custom-price-input-display').value = "";
+            document.getElementById('custom-price-modal-overlay').classList.add('active');
+        }
+        function pressCustomPriceKey(k) {
+            if (k === 'C') currentCustomPriceInput = "";
+            else currentCustomPriceInput += k;
+            document.getElementById('custom-price-input-display').value = currentCustomPriceInput;
+        }
+        function closeCustomPriceModal() {
+            document.getElementById('custom-price-modal-overlay').classList.remove('active');
+        }
+        function confirmCustomPriceProduct() {
+            const val = parseInt(currentCustomPriceInput) || 0;
+            if (val <= 0) return alert("正しい金額を入力してください");
+
+            cart.push({
+                type: 'product',
+                name: '金額指定商品',
+                price: val,
+                qty: 1,
+                uid: Date.now()
+            });
+            closeCustomPriceModal();
+            renderCart();
         }
 
         function removeItem(uid) {
