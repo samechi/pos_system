@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>グッズ販売 POSレジシステム</title>
+    <!-- QRコード読み取り用ライブラリ -->
+    <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
         :root {
             --bg-color: #1e293b;
@@ -90,9 +92,8 @@
         .cash-keypad button { padding: 15px; font-size: 1.3rem; border: none; border-radius: 6px; background: #475569; color: white; cursor: pointer; }
         .cash-keypad button:active { opacity: 0.8; }
 
-        /* --- NFCカード決済アニメーション & UI --- */
-        .nfc-animation { font-size: 3rem; margin: 20px 0; animation: pulse 1.5s infinite; }
-        @keyframes pulse { 0% { transform: scale(1); opacity: 0.8; } 50% { transform: scale(1.1); opacity: 1; } 100% { transform: scale(1); opacity: 0.8; } }
+        /* --- QRコード読み取りエリア --- */
+        #qr-reader { width: 100%; max-width: 320px; margin: 10px auto; border-radius: 8px; overflow: hidden; background: #1e293b; }
 
         /* --- 印刷用設定 --- */
         @media print {
@@ -314,7 +315,7 @@
         <h2>決済方法を選択してください</h2>
         <div class="method-group">
             <button class="method-btn" onclick="startPay('cash')"><span>💴</span>現金決済</button>
-            <button class="method-btn" onclick="startPay('card')" style="background:#2563eb;"><span>💳</span>カード決済<br>(NFC)</button>
+            <button class="method-btn" onclick="startPay('qr')" style="background:#2563eb;"><span>📱</span>QRコード決済</button>
             <button class="method-btn" onclick="startPay('id')"><span>📝</span>決済ID発行<br>(後払い)</button>
         </div>
         <button onclick="changeScreen('main-screen')" style="margin-top:20px; background:none; border:1px solid white; color:white; padding:10px 20px; border-radius:6px; cursor:pointer;">レジ画面に戻る</button>
@@ -339,23 +340,25 @@
             </div>
         </div>
 
-        <!-- NFCカード読み取りパネル -->
-        <div id="card-panel" class="modal-box" style="display:none; text-align:center;">
-            <h3>NFCカード決済</h3>
-            <p style="font-size:1.1rem; margin-top:5px;">お支払い合計: <strong id="card-total-text" style="font-size:1.4rem; color:var(--warn-color);"></strong></p>
+        <!-- QRコード読み取りパネル -->
+        <div id="qr-panel" class="modal-box" style="display:none; text-align:center;">
+            <h3>QRコード決済</h3>
+            <p style="font-size:1.1rem; margin-top:5px;">お支払い合計: <strong id="qr-total-text" style="font-size:1.4rem; color:var(--warn-color);"></strong></p>
             
-            <div class="nfc-animation">💳</div>
-            <p id="nfc-status" style="color:#60a5fa; margin-bottom:15px;">NFCカードをかざしてください...</p>
+            <p id="qr-status" style="color:#60a5fa; margin-top:10px;">カメラにかざしてください...</p>
             
-            <!-- 未対応ブラウザ / 手入力テスト用フォールバック -->
-            <div id="nfc-fallback" style="display:none; margin-top:15px; border-top:1px dashed #475569; padding-top:10px;">
+            <!-- カメラ描画領域 -->
+            <div id="qr-reader"></div>
+            
+            <!-- 手入力テスト用フォールバック -->
+            <div id="qr-fallback" style="margin-top:15px; border-top:1px dashed #475569; padding-top:10px;">
                 <p style="font-size:0.8rem; color:#94a3b8;">[手入力用] 識別コードを入力:</p>
-                <input type="text" id="manual-card-code" style="width:100%; padding:8px; margin:5px 0; background:#1e293b; color:white; border:none; border-radius:4px;">
-                <button onclick="processCardPayment(document.getElementById('manual-card-code').value)" style="width:100%; padding:8px; background:var(--accent-color); color:white; border:none; border-radius:4px; cursor:pointer;">コードで決済実行</button>
+                <input type="text" id="manual-qr-code" style="width:100%; padding:8px; margin:5px 0; background:#1e293b; color:white; border:none; border-radius:4px;">
+                <button onclick="processQRPayment(document.getElementById('manual-qr-code').value)" style="width:100%; padding:8px; background:var(--accent-color); color:white; border:none; border-radius:4px; cursor:pointer;">コードで決済実行</button>
             </div>
 
             <div class="btn-group" style="margin-top:20px;">
-                <button onclick="cancelCardScan()" style="background:#64748b; color:white;">キャンセル</button>
+                <button onclick="cancelQRScan()" style="background:#64748b; color:white;">キャンセル</button>
             </div>
         </div>
 
@@ -400,7 +403,9 @@
         let currentCustomPriceInput = "";
         let currentCashInput = "";
         let editingProductId = null;
-        let ndefController = null; // NFCスキャン停止用
+        
+        let html5QrCode = null; // QRスキャナインスタンス
+        let isProcessingPayment = false; // 重複決済防止フラグ
 
         const products = [
             { id: 'p1', category: 'vege', name: 'ロゴTシャツA', price: 2500 },
@@ -820,7 +825,7 @@
             const total = document.getElementById('sum-total').innerText;
             
             document.getElementById('cash-panel').style.display = 'none';
-            document.getElementById('card-panel').style.display = 'none';
+            document.getElementById('qr-panel').style.display = 'none';
             document.getElementById('id-panel').style.display = 'none';
 
             if (type === 'cash') {
@@ -829,10 +834,10 @@
                 currentCashInput = "";
                 document.getElementById('cash-receive').value = "¥0";
                 document.getElementById('cash-change').innerText = "¥0";
-            } else if (type === 'card') {
-                document.getElementById('card-panel').style.display = 'block';
-                document.getElementById('card-total-text').innerText = total;
-                startNFCScan();
+            } else if (type === 'qr') {
+                document.getElementById('qr-panel').style.display = 'block';
+                document.getElementById('qr-total-text').innerText = total;
+                startQRScan();
             } else {
                 document.getElementById('id-panel').style.display = 'block';
                 document.getElementById('id-total-text').innerText = total;
@@ -841,84 +846,85 @@
             }
         }
 
-        // --- NFCカード読み取り・カード決済処理 ---
-        async function startNFCScan() {
-            const statusEl = document.getElementById('nfc-status');
-            const fallbackEl = document.getElementById('nfc-fallback');
-            statusEl.innerText = "NFCカードをかざしてください...";
-            fallbackEl.style.display = "none";
+        // --- QRコード読み取り・決済処理 ---
+        async function startQRScan() {
+            const statusEl = document.getElementById('qr-status');
+            statusEl.innerText = "カメラを起動しています...";
+            isProcessingPayment = false;
 
-            if ('NDEFReader' in window) {
+            if (!html5QrCode) {
+                html5QrCode = new Html5Qrcode("qr-reader");
+            }
+
+            try {
+                await html5QrCode.start(
+                    { facingMode: "environment" }, // 背面カメラを優先
+                    { fps: 10, qrbox: { width: 250, height: 250 } },
+                    (decodedText, decodedResult) => {
+                        if (!isProcessingPayment) {
+                            isProcessingPayment = true;
+                            stopQRScan().then(() => {
+                                processQRPayment(decodedText);
+                            });
+                        }
+                    },
+                    (errorMessage) => {
+                        // スキャン中の軽微なエラーは無視
+                    }
+                );
+                statusEl.innerText = "カメラにかざしてください...";
+            } catch (err) {
+                statusEl.innerText = "カメラの起動に失敗しました（パーミッションを確認してください）";
+            }
+        }
+
+        async function stopQRScan() {
+            if (html5QrCode && html5QrCode.isScanning) {
                 try {
-                    ndefController = new AbortController();
-                    const ndef = new NDEFReader();
-                    await ndef.scan({ signal: ndefController.signal });
-
-                    ndef.addEventListener("reading", ({ message, serialNumber }) => {
-                        let cardCode = "";
-                        for (const record of message.records) {
-                            if (record.recordType === "text") {
-                                const textDecoder = new TextDecoder(record.encoding);
-                                cardCode = textDecoder.decode(record.data);
-                                break;
-                            }
-                        }
-                        if (!cardCode && serialNumber) {
-                            cardCode = serialNumber; // テキストがない場合はシリアルを使用
-                        }
-
-                        if (cardCode) {
-                            ndefController.abort(); // 読み取り成功でスキャン停止
-                            processCardPayment(cardCode);
-                        } else {
-                            statusEl.innerText = "カードからデータを読み取れませんでした。";
-                        }
-                    });
-                } catch (error) {
-                    statusEl.innerText = "NFC読み取りの起動に失敗しました。";
-                    fallbackEl.style.display = "block";
+                    await html5QrCode.stop();
+                } catch (e) {
+                    console.error("Camera stop error:", e);
                 }
-            } else {
-                statusEl.innerText = "お使いの端末/ブラウザは Web NFC に非対応です。";
-                fallbackEl.style.display = "block";
             }
         }
 
-        function cancelCardScan() {
-            if (ndefController) {
-                ndefController.abort();
-            }
-            changeScreen('payment-method-screen');
+        function cancelQRScan() {
+            stopQRScan().then(() => {
+                changeScreen('payment-method-screen');
+            });
         }
 
-        async function processCardPayment(cardCode) {
-            if (!cardCode) return alert("識別コードが正しくありません");
+        async function processQRPayment(qrCodeVal) {
+            if (!qrCodeVal) return alert("識別コードが正しくありません");
 
-            const statusEl = document.getElementById('nfc-status');
+            const statusEl = document.getElementById('qr-status');
             statusEl.innerText = "通信・決済処理中...";
 
             const totalAmount = parseInt(document.getElementById('sum-total').innerText.replace(/[^0-9]/g, ""));
 
             try {
+                // バックエンドのGASで cardCode 名のパラメーターを受け取っている場合はそのまま使用できます
                 const response = await fetch(GAS_API_URL, {
                     method: "POST",
                     body: JSON.stringify({
                         action: "pay",
-                        cardCode: cardCode,
+                        cardCode: qrCodeVal,
                         amount: totalAmount
                     })
                 });
                 const res = await response.json();
 
                 if (res.success) {
-                    complete('card', res);
+                    complete('qr', res);
                 } else {
                     alert("決済エラー: " + res.message);
                     statusEl.innerText = "エラー: " + res.message;
+                    isProcessingPayment = false;
                 }
             } catch (err) {
                 alert("通信エラーが発生しました: " + err.message);
                 statusEl.innerText = "通信エラーが発生しました";
+                isProcessingPayment = false;
             }
         }
 
@@ -941,7 +947,7 @@
         }
 
         // --- 4. 精算処理 ---
-        function complete(type, cardResData = null) {
+        function complete(type, qrResData = null) {
             const totalAmount = parseInt(document.getElementById('sum-total').innerText.replace(/[^0-9]/g, ""));
             const receiveAmount = parseInt(currentCashInput) || 0;
 
@@ -975,10 +981,10 @@
             if (type === 'cash') {
                 html += `<p>お預かり: ¥${receiveAmount.toLocaleString()}</p>`;
                 html += `<p>お釣り: ${document.getElementById('cash-change').innerText}</p>`;
-            } else if (type === 'card' && cardResData) {
-                html += `<br><h3>【カード決済受領書】</h3>`;
-                html += `<p>決済ID: ${cardResData.payId}</p>`;
-                html += `<p>残高: ¥${cardResData.remainingBalance.toLocaleString()}</p>`;
+            } else if (type === 'qr' && qrResData) {
+                html += `<br><h3>【QRコード決済受領書】</h3>`;
+                html += `<p>決済ID: ${qrResData.payId}</p>`;
+                html += `<p>残高: ¥${qrResData.remainingBalance.toLocaleString()}</p>`;
             } else if (type === 'id') {
                 html += `<br><h3>【後払い受領書】</h3>`;
                 html += `<p>決済ID: ${document.getElementById('display-pay-id').innerText}</p>`;
@@ -986,12 +992,12 @@
             }
             
             area.innerHTML = html;
-            showPaymentResult(type, totalAmount, receiveAmount, cardResData);
+            showPaymentResult(type, totalAmount, receiveAmount, qrResData);
         }
 
-        function showPaymentResult(type, totalAmount, receiveAmount, cardResData) {
+        function showPaymentResult(type, totalAmount, receiveAmount, qrResData) {
             document.getElementById('cash-panel').style.display = 'none';
-            document.getElementById('card-panel').style.display = 'none';
+            document.getElementById('qr-panel').style.display = 'none';
             document.getElementById('id-panel').style.display = 'none';
             
             const result = document.getElementById('payment-result-content');
@@ -1000,10 +1006,10 @@
             if (type === 'cash') {
                 resultHtml += `<p>お預かり: <strong>¥${receiveAmount.toLocaleString()}</strong></p>`;
                 resultHtml += `<p>お釣り: <strong>¥${Math.max(0, receiveAmount - totalAmount).toLocaleString()}</strong></p>`;
-            } else if (type === 'card' && cardResData) {
-                resultHtml += `<p>お支払い方法: <strong>カード決済</strong></p>`;
-                resultHtml += `<p>決済ID: <strong style="color:var(--accent-color);">${cardResData.payId}</strong></p>`;
-                resultHtml += `<p>利用後残高: <strong style="color:var(--success-color);">¥${cardResData.remainingBalance.toLocaleString()}</strong></p>`;
+            } else if (type === 'qr' && qrResData) {
+                resultHtml += `<p>お支払い方法: <strong>QRコード決済</strong></p>`;
+                resultHtml += `<p>決済ID: <strong style="color:var(--accent-color);">${qrResData.payId}</strong></p>`;
+                resultHtml += `<p>利用後残高: <strong style="color:var(--success-color);">¥${qrResData.remainingBalance.toLocaleString()}</strong></p>`;
             } else {
                 resultHtml += `<p>お預かり: <strong>後払い</strong></p>`;
                 resultHtml += `<p>お釣り: <strong>¥0</strong></p>`;
