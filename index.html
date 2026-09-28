@@ -90,6 +90,10 @@
         .cash-keypad button { padding: 15px; font-size: 1.3rem; border: none; border-radius: 6px; background: #475569; color: white; cursor: pointer; }
         .cash-keypad button:active { opacity: 0.8; }
 
+        /* --- NFCカード決済アニメーション & UI --- */
+        .nfc-animation { font-size: 3rem; margin: 20px 0; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { transform: scale(1); opacity: 0.8; } 50% { transform: scale(1.1); opacity: 1; } 100% { transform: scale(1); opacity: 0.8; } }
+
         /* --- 印刷用設定 --- */
         @media print {
             body * { display: none !important; }
@@ -198,7 +202,7 @@
             <div id="tab-disc" class="item-grid">
                 <button class="item-btn discount-op" onclick="addDiscountToCart('percent', 5, '5% OFF')"><span>5% OFF</span></button>
                 <button class="item-btn discount-op" onclick="addDiscountToCart('percent', 10, '10% OFF')"><span>10% OFF</span></button>
-                <button class="item-btn discount-op" onclick="addDiscountToCart('percent', 20, '20% OFF')"><span>社員割引(20%)</span></button>
+                <button class="item-btn discount-op" onclick="addDiscountToCart('percent', 20, '社員割引(20%)')"><span>社員割引(20%)</span></button>
                 <button class="item-btn discount-op" onclick="addDiscountToCart('percent', 50, '半額 (50%)')"><span>半額 (50%)</span></button>
                 <button class="item-btn discount-op" onclick="addDiscountToCart('fixed', 100, '100円 OFF')"><span>100円 OFF</span></button>
                 <button class="item-btn discount-op" onclick="addDiscountToCart('fixed', 500, '500円 OFF')"><span>500円 OFF</span></button>
@@ -208,6 +212,24 @@
             <div id="tab-custom" class="item-grid">
                 <button class="item-btn" onclick="addAllProducts()" style="background: #2563eb;"><span>📦 全商品を追加</span></button>
                 <button class="item-btn" onclick="openCustomPriceModal()" style="background: #9a3412;"><span>💰 金額指定商品</span></button>
+                <button class="item-btn" onclick="openCancelModal()" style="background: var(--danger-color);"><span>↩️ 会計取り消し</span></button>
+            </div>
+        </div>
+    </div>
+
+    <div id="admin-screen" class="screen">
+        <div class="cart-section">
+            <div class="cart-header">
+                <div class="cart-header-left">
+                    <span>商品管理</span>
+                    <small style="color:#94a3b8;">社員ID 051 用管理画面</small>
+                </div>
+                <button class="logout-btn" onclick="doLogout()">ログアウト</button>
+            </div>
+            <div id="product-admin-list" class="cart-list"></div>
+            <div class="cart-summary">
+                <button class="checkout-btn" onclick="openProductAddModal()" style="background:#2563eb;">新規商品追加</button>
+                <button class="checkout-btn" onclick="changeScreen('main-screen')" style="background:#64748b;">レジ画面へ</button>
             </div>
         </div>
     </div>
@@ -242,6 +264,37 @@
         </div>
     </div>
 
+    <!-- 会計取消モーダル -->
+    <div id="cancel-modal-overlay" class="modal-overlay">
+        <div class="qty-modal" style="width: 400px;">
+            <h3>会計取り消し</h3>
+            <p style="font-size:0.85rem; color:#cbd5e1; margin-bottom:10px;">取り消す決済IDを入力してください</p>
+            <input type="text" id="cancel-pay-id-input" class="qty-display" style="font-size:1.2rem; text-align:left; padding:10px;" placeholder="例: CARD-PAY-123456">
+            <div class="btn-group">
+                <button onclick="closeCancelModal()" style="background:#64748b; color:white;">キャンセル</button>
+                <button class="enter-btn" onclick="executeCancel()" style="background:var(--danger-color); color:white;">取り消し実行</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="admin-product-modal-overlay" class="modal-overlay">
+        <div class="qty-modal">
+            <h3 id="admin-product-modal-title">商品を編集</h3>
+            <input type="text" id="admin-product-name" class="qty-display" placeholder="商品名">
+            <input type="number" id="admin-product-price" class="qty-display" placeholder="価格" style="margin-top:10px;">
+            <select id="admin-product-category" class="qty-display" style="margin-top:10px; padding: 12px;">
+                <option value="vege">一般グッズ</option>
+                <option value="spice">小物類</option>
+                <option value="fried">文房具系</option>
+                <option value="other">その他</option>
+            </select>
+            <div class="keypad" style="grid-template-columns: 1fr 1fr;">
+                <button onclick="closeAdminProductModal()" style="background:#64748b;">キャンセル</button>
+                <button class="enter-btn" onclick="saveAdminProduct()" style="background:var(--success-color);">保存</button>
+            </div>
+        </div>
+    </div>
+
     <div id="custom-price-modal-overlay" class="modal-overlay">
         <div class="qty-modal">
             <h3>金額を指定してください</h3>
@@ -261,33 +314,52 @@
         <h2>決済方法を選択してください</h2>
         <div class="method-group">
             <button class="method-btn" onclick="startPay('cash')"><span>💴</span>現金決済</button>
+            <button class="method-btn" onclick="startPay('card')" style="background:#2563eb;"><span>💳</span>カード決済<br>(NFC)</button>
             <button class="method-btn" onclick="startPay('id')"><span>📝</span>決済ID発行<br>(後払い)</button>
         </div>
         <button onclick="changeScreen('main-screen')" style="margin-top:20px; background:none; border:1px solid white; color:white; padding:10px 20px; border-radius:6px; cursor:pointer;">レジ画面に戻る</button>
     </div>
 
     <div id="checkout-screen" class="screen">
+        <!-- 現金パネル -->
         <div id="cash-panel" class="modal-box" style="display:none;">
             <h3>現金会計</h3>
             <p style="font-size:1.1rem; margin-top:5px; text-align: center;">お支払い合計: <strong id="cash-total-text" style="font-size:1.4rem; color:var(--warn-color);"></strong></p>
-            
             <input type="text" id="cash-receive" class="display-input" placeholder="¥0" readonly>
-            
             <div class="cash-keypad">
                 <button onclick="pressCashKey('1')">1</button><button onclick="pressCashKey('2')">2</button><button onclick="pressCashKey('3')">3</button>
                 <button onclick="pressCashKey('4')">4</button><button onclick="pressCashKey('5')">5</button><button onclick="pressCashKey('6')">6</button>
                 <button onclick="pressCashKey('7')">7</button><button onclick="pressCashKey('8')">8</button><button onclick="pressCashKey('9')">9</button>
                 <button onclick="pressCashKey('C')" style="background:var(--danger-color);">C</button><button onclick="pressCashKey('0')">0</button><button onclick="pressCashKey('00')">00</button>
             </div>
-
             <p style="margin-top:15px; text-align:center; font-size:1.2rem;">お釣り: <strong id="cash-change" style="color:var(--success-color); font-size:1.8rem;">¥0</strong></p>
-            
             <div class="btn-group">
                 <button onclick="changeScreen('payment-method-screen')" style="background:#64748b; color:white;">キャンセル</button>
                 <button class="enter-btn" onclick="complete('cash')" style="background:var(--success-color); color:white;">精算確定</button>
             </div>
         </div>
 
+        <!-- NFCカード読み取りパネル -->
+        <div id="card-panel" class="modal-box" style="display:none; text-align:center;">
+            <h3>NFCカード決済</h3>
+            <p style="font-size:1.1rem; margin-top:5px;">お支払い合計: <strong id="card-total-text" style="font-size:1.4rem; color:var(--warn-color);"></strong></p>
+            
+            <div class="nfc-animation">💳</div>
+            <p id="nfc-status" style="color:#60a5fa; margin-bottom:15px;">NFCカードをかざしてください...</p>
+            
+            <!-- 未対応ブラウザ / 手入力テスト用フォールバック -->
+            <div id="nfc-fallback" style="display:none; margin-top:15px; border-top:1px dashed #475569; padding-top:10px;">
+                <p style="font-size:0.8rem; color:#94a3b8;">[手入力用] 識別コードを入力:</p>
+                <input type="text" id="manual-card-code" style="width:100%; padding:8px; margin:5px 0; background:#1e293b; color:white; border:none; border-radius:4px;">
+                <button onclick="processCardPayment(document.getElementById('manual-card-code').value)" style="width:100%; padding:8px; background:var(--accent-color); color:white; border:none; border-radius:4px; cursor:pointer;">コードで決済実行</button>
+            </div>
+
+            <div class="btn-group" style="margin-top:20px;">
+                <button onclick="cancelCardScan()" style="background:#64748b; color:white;">キャンセル</button>
+            </div>
+        </div>
+
+        <!-- 後払いパネル -->
         <div id="id-panel" class="modal-box" style="display:none;">
             <h3>後払い申請確認</h3>
             <div style="background:#1e293b; padding:15px; border-radius:6px; margin:15px 0; display:flex; flex-direction:column; gap:10px;">
@@ -301,6 +373,7 @@
             </div>
         </div>
 
+        <!-- 決済結果表示パネル -->
         <div id="payment-result-panel" class="modal-box" style="display:none;">
             <h3>決済完了</h3>
             <div id="payment-result-content" style="background:#1e293b; padding:15px; border-radius:6px; margin:15px 0; display:flex; flex-direction:column; gap:10px;"></div>
@@ -313,6 +386,9 @@
     <div id="receipt-area"></div>
 
     <script>
+        // ★ GASのWebアプリURLをここに設定してください ★
+        const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxIRho2PJXoX_kjw6UObejtE2x2fMc_TZCIBa03A7ji4U6L_TFrS00UU4FwB7cpan8/exec";
+
         let staffId = "";
         let cart = [];
         let payType = "";
@@ -323,6 +399,60 @@
         let currentDiscountInput = "";
         let currentCustomPriceInput = "";
         let currentCashInput = "";
+        let editingProductId = null;
+        let ndefController = null; // NFCスキャン停止用
+
+        const products = [
+            { id: 'p1', category: 'vege', name: 'ロゴTシャツA', price: 2500 },
+            { id: 'p2', category: 'vege', name: 'ロゴTシャツB', price: 2500 },
+            { id: 'p3', category: 'vege', name: 'ロゴTシャツC', price: 2500 },
+            { id: 'p4', category: 'vege', name: 'プリントTシャツA', price: 2800 },
+            { id: 'p5', category: 'vege', name: 'プリントTシャツB', price: 2800 },
+            { id: 'p6', category: 'vege', name: '長袖TシャツA', price: 3200 },
+            { id: 'p7', category: 'vege', name: '長袖TシャツB', price: 3200 },
+            { id: 'p8', category: 'vege', name: 'パーカーA', price: 4500 },
+            { id: 'p9', category: 'vege', name: 'パーカーB', price: 4500 },
+            { id: 'p10', category: 'vege', name: 'スウェットA', price: 4200 },
+            { id: 'p11', category: 'vege', name: 'スウェットB', price: 4200 },
+            { id: 'p12', category: 'vege', name: 'タンクトップA', price: 1900 },
+            { id: 'p13', category: 'vege', name: 'タンクトップB', price: 1900 },
+            { id: 'p14', category: 'vege', name: 'キャップ2026', price: 1800 },
+            { id: 'p15', category: 'vege', name: 'キャップ2025', price: 1800 },
+            { id: 'p16', category: 'vege', name: 'トートバッグA', price: 1600 },
+            { id: 'p17', category: 'vege', name: 'トートバッグB', price: 1600 },
+            { id: 'p18', category: 'spice', name: 'キーホルダーA', price: 600 },
+            { id: 'p19', category: 'spice', name: 'キーホルダーB', price: 600 },
+            { id: 'p20', category: 'spice', name: 'アクリルスタンドA', price: 1200 },
+            { id: 'p21', category: 'spice', name: 'アクリルスタンドB', price: 1200 },
+            { id: 'p22', category: 'spice', name: 'ラバーリング2026', price: 800 },
+            { id: 'p23', category: 'spice', name: 'ラバーリング2025', price: 800 },
+            { id: 'p24', category: 'spice', name: 'ピンバッジA', price: 500 },
+            { id: 'p25', category: 'spice', name: 'ピンバッジB', price: 500 },
+            { id: 'p26', category: 'spice', name: 'エコバッグ', price: 1200 },
+            { id: 'p27', category: 'spice', name: 'ステンレスボトル', price: 2800 },
+            { id: 'p28', category: 'spice', name: 'ミニタオル', price: 450 },
+            { id: 'p29', category: 'spice', name: 'スマホリング', price: 950 },
+            { id: 'p30', category: 'spice', name: 'パスケース', price: 1300 },
+            { id: 'p31', category: 'fried', name: 'ノートセット', price: 900 },
+            { id: 'p32', category: 'fried', name: 'ステッカーセットA', price: 700 },
+            { id: 'p33', category: 'fried', name: 'ステッカーセットB', price: 700 },
+            { id: 'p34', category: 'fried', name: 'ペン4本セットA', price: 850 },
+            { id: 'p35', category: 'fried', name: 'ペン4本セットB', price: 850 },
+            { id: 'p36', category: 'fried', name: 'マスキングテープA', price: 650 },
+            { id: 'p37', category: 'fried', name: 'マスキングテープB', price: 650 },
+            { id: 'p38', category: 'fried', name: 'クリアファイルA', price: 550 },
+            { id: 'p39', category: 'fried', name: 'クリアファイルB', price: 550 },
+            { id: 'p40', category: 'other', name: '有料袋（小）', price: 5 },
+            { id: 'p41', category: 'other', name: '有料袋（中）', price: 10 },
+            { id: 'p42', category: 'other', name: '有料袋（大）', price: 15 }
+        ];
+
+        const categoryLabels = {
+            vege: '一般グッズ',
+            spice: '小物類',
+            fried: '文房具系',
+            other: 'その他'
+        };
 
         function changeScreen(id) {
             document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -339,6 +469,12 @@
         function doLogin() {
             if (!staffId) return alert("IDを入力してください");
             document.getElementById('op-name').innerText = `[担当者ID: ${staffId}]`;
+            renderMenu();
+            if (staffId === '051') {
+                renderAdminProductList();
+                changeScreen('admin-screen');
+                return;
+            }
             changeScreen('main-screen');
         }
         function doLogout() {
@@ -393,52 +529,98 @@
             renderCart();
         }
 
+        function renderMenu() {
+            ['vege', 'spice', 'fried', 'other'].forEach(category => {
+                const container = document.getElementById('tab-' + category);
+                if (!container) return;
+                container.innerHTML = '';
+                products
+                    .filter(item => item.category === category)
+                    .forEach(product => {
+                        container.innerHTML += `<button class="item-btn" onclick="openQtyModal('${product.name}', ${product.price})"><span>${product.name}</span><span>¥${product.price.toLocaleString()}</span></button>`;
+                    });
+            });
+        }
+
+        function renderAdminProductList() {
+            const list = document.getElementById('product-admin-list');
+            if (!list) return;
+            list.innerHTML = '';
+            if (products.length === 0) {
+                list.innerHTML = '<p style="padding:20px; color:#cbd5e1;">登録商品がありません。</p>';
+                return;
+            }
+            products.forEach(product => {
+                list.innerHTML += `
+                    <div class="cart-item">
+                        <div class="cart-item-detail">
+                            <span style="font-weight:bold;">${product.name}</span>
+                            <span style="font-size:0.85rem; color:#94a3b8;">${categoryLabels[product.category]} / ¥${product.price.toLocaleString()}</span>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <button onclick="openProductEditModal('${product.id}')" style="background:#2563eb; color:white; border:none; padding:6px 10px; border-radius:4px; cursor:pointer;">編集</button>
+                            <button onclick="deleteProduct('${product.id}')" style="background:var(--danger-color); color:white; border:none; padding:6px 10px; border-radius:4px; cursor:pointer;">削除</button>
+                        </div>
+                    </div>`;
+            });
+        }
+
+        function openProductAddModal() {
+            editingProductId = null;
+            document.getElementById('admin-product-modal-title').innerText = '新規商品を追加';
+            document.getElementById('admin-product-name').value = '';
+            document.getElementById('admin-product-price').value = '';
+            document.getElementById('admin-product-category').value = 'vege';
+            document.getElementById('admin-product-modal-overlay').classList.add('active');
+        }
+
+        function openProductEditModal(id) {
+            const product = products.find(item => item.id === id);
+            if (!product) return;
+            editingProductId = id;
+            document.getElementById('admin-product-modal-title').innerText = '商品を編集';
+            document.getElementById('admin-product-name').value = product.name;
+            document.getElementById('admin-product-price').value = product.price;
+            document.getElementById('admin-product-category').value = product.category;
+            document.getElementById('admin-product-modal-overlay').classList.add('active');
+        }
+
+        function closeAdminProductModal() {
+            document.getElementById('admin-product-modal-overlay').classList.remove('active');
+        }
+
+        function saveAdminProduct() {
+            const name = document.getElementById('admin-product-name').value.trim();
+            const price = parseInt(document.getElementById('admin-product-price').value, 10) || 0;
+            const category = document.getElementById('admin-product-category').value;
+            if (!name) return alert('商品名を入力してください');
+            if (price <= 0) return alert('価格は1以上を入力してください');
+
+            if (editingProductId) {
+                const product = products.find(item => item.id === editingProductId);
+                if (!product) return;
+                product.name = name;
+                product.price = price;
+                product.category = category;
+            } else {
+                products.push({ id: 'p' + Date.now() + Math.random(), category, name, price });
+            }
+            closeAdminProductModal();
+            renderMenu();
+            renderAdminProductList();
+        }
+
+        function deleteProduct(id) {
+            if (!confirm('本当にこの商品を削除しますか？')) return;
+            const index = products.findIndex(item => item.id === id);
+            if (index === -1) return;
+            products.splice(index, 1);
+            renderMenu();
+            renderAdminProductList();
+        }
+
         function addAllProducts() {
-            const allProducts = [
-                { name: 'ロゴTシャツA', price: 2500 },
-                { name: 'ロゴTシャツB', price: 2500 },
-                { name: 'ロゴTシャツC', price: 2500 },
-                { name: 'プリントTシャツA', price: 2800 },
-                { name: 'プリントTシャツB', price: 2800 },
-                { name: '長袖TシャツA', price: 3200 },
-                { name: '長袖TシャツB', price: 3200 },
-                { name: 'パーカーA', price: 4500 },
-                { name: 'パーカーB', price: 4500 },
-                { name: 'スウェットA', price: 4200 },
-                { name: 'スウェットB', price: 4200 },
-                { name: 'タンクトップA', price: 1900 },
-                { name: 'タンクトップB', price: 1900 },
-                { name: 'キャップ2026', price: 1800 },
-                { name: 'キャップ2025', price: 1800 },
-                { name: 'トートバッグA', price: 1600 },
-                { name: 'トートバッグB', price: 1600 },
-                { name: 'キーホルダーA', price: 600 },
-                { name: 'キーホルダーB', price: 600 },
-                { name: 'アクリルスタンドA', price: 1200 },
-                { name: 'アクリルスタンドB', price: 1200 },
-                { name: 'ラバーリング2026', price: 800 },
-                { name: 'ラバーリング2025', price: 800 },
-                { name: 'ピンバッジA', price: 500 },
-                { name: 'ピンバッジB', price: 500 },
-                { name: 'エコバッグ', price: 1200 },
-                { name: 'ステンレスボトル', price: 2800 },
-                { name: 'ミニタオル', price: 450 },
-                { name: 'スマホリング', price: 950 },
-                { name: 'パスケース', price: 1300 },
-                { name: 'ノートセット', price: 900 },
-                { name: 'ステッカーセットA', price: 700 },
-                { name: 'ステッカーセットB', price: 700 },
-                { name: 'ペン4本セットA', price: 850 },
-                { name: 'ペン4本セットB', price: 850 },
-                { name: 'マスキングテープA', price: 650 },
-                { name: 'マスキングテープB', price: 650 },
-                { name: 'クリアファイルA', price: 550 },
-                { name: 'クリアファイルB', price: 550 },
-                { name: '有料袋（小）', price: 700 },
-                { name: '有料袋（中）', price: 1000 },
-                { name: '有料袋（大）', price: 1500 }
-            ];
-            allProducts.forEach(product => {
+            products.forEach(product => {
                 cart.push({
                     type: 'product',
                     name: product.name,
@@ -514,6 +696,38 @@
             });
             closeCustomPriceModal();
             renderCart();
+        }
+
+        // --- 会計取り消し処理 ---
+        function openCancelModal() {
+            document.getElementById('cancel-pay-id-input').value = "";
+            document.getElementById('cancel-modal-overlay').classList.add('active');
+        }
+        function closeCancelModal() {
+            document.getElementById('cancel-modal-overlay').classList.remove('active');
+        }
+        async function executeCancel() {
+            const payId = document.getElementById('cancel-pay-id-input').value.trim();
+            if (!payId) return alert("決済IDを入力してください");
+
+            if (!confirm(`決済ID: ${payId}\nの会計を取り消しますか？`)) return;
+
+            try {
+                const response = await fetch(GAS_API_URL, {
+                    method: "POST",
+                    body: JSON.stringify({ action: "cancel", payId: payId })
+                });
+                const res = await response.json();
+
+                if (res.success) {
+                    alert(res.message);
+                    closeCancelModal();
+                } else {
+                    alert("エラー: " + res.message);
+                }
+            } catch (err) {
+                alert("通信エラーが発生しました: " + err.message);
+            }
         }
 
         function removeItem(uid) {
@@ -605,19 +819,106 @@
             changeScreen('checkout-screen');
             const total = document.getElementById('sum-total').innerText;
             
+            document.getElementById('cash-panel').style.display = 'none';
+            document.getElementById('card-panel').style.display = 'none';
+            document.getElementById('id-panel').style.display = 'none';
+
             if (type === 'cash') {
                 document.getElementById('cash-panel').style.display = 'block';
-                document.getElementById('id-panel').style.display = 'none';
                 document.getElementById('cash-total-text').innerText = total;
                 currentCashInput = "";
                 document.getElementById('cash-receive').value = "¥0";
                 document.getElementById('cash-change').innerText = "¥0";
+            } else if (type === 'card') {
+                document.getElementById('card-panel').style.display = 'block';
+                document.getElementById('card-total-text').innerText = total;
+                startNFCScan();
             } else {
-                document.getElementById('cash-panel').style.display = 'none';
                 document.getElementById('id-panel').style.display = 'block';
                 document.getElementById('id-total-text').innerText = total;
                 document.getElementById('display-pay-id').innerText = "PAY-" + Date.now().toString().slice(-6);
                 document.getElementById('display-pay-date').innerText = new Date().toLocaleDateString();
+            }
+        }
+
+        // --- NFCカード読み取り・カード決済処理 ---
+        async function startNFCScan() {
+            const statusEl = document.getElementById('nfc-status');
+            const fallbackEl = document.getElementById('nfc-fallback');
+            statusEl.innerText = "NFCカードをかざしてください...";
+            fallbackEl.style.display = "none";
+
+            if ('NDEFReader' in window) {
+                try {
+                    ndefController = new AbortController();
+                    const ndef = new NDEFReader();
+                    await ndef.scan({ signal: ndefController.signal });
+
+                    ndef.addEventListener("reading", ({ message, serialNumber }) => {
+                        let cardCode = "";
+                        for (const record of message.records) {
+                            if (record.recordType === "text") {
+                                const textDecoder = new TextDecoder(record.encoding);
+                                cardCode = textDecoder.decode(record.data);
+                                break;
+                            }
+                        }
+                        if (!cardCode && serialNumber) {
+                            cardCode = serialNumber; // テキストがない場合はシリアルを使用
+                        }
+
+                        if (cardCode) {
+                            ndefController.abort(); // 読み取り成功でスキャン停止
+                            processCardPayment(cardCode);
+                        } else {
+                            statusEl.innerText = "カードからデータを読み取れませんでした。";
+                        }
+                    });
+                } catch (error) {
+                    statusEl.innerText = "NFC読み取りの起動に失敗しました。";
+                    fallbackEl.style.display = "block";
+                }
+            } else {
+                statusEl.innerText = "お使いの端末/ブラウザは Web NFC に非対応です。";
+                fallbackEl.style.display = "block";
+            }
+        }
+
+        function cancelCardScan() {
+            if (ndefController) {
+                ndefController.abort();
+            }
+            changeScreen('payment-method-screen');
+        }
+
+        async function processCardPayment(cardCode) {
+            if (!cardCode) return alert("識別コードが正しくありません");
+
+            const statusEl = document.getElementById('nfc-status');
+            statusEl.innerText = "通信・決済処理中...";
+
+            const totalAmount = parseInt(document.getElementById('sum-total').innerText.replace(/[^0-9]/g, ""));
+
+            try {
+                const response = await fetch(GAS_API_URL, {
+                    method: "POST",
+                    body: JSON.stringify({
+                        action: "pay",
+                        cardCode: cardCode,
+                        amount: totalAmount
+                    })
+                });
+                const res = await response.json();
+
+                if (res.success) {
+                    complete('card', res);
+                } else {
+                    alert("決済エラー: " + res.message);
+                    statusEl.innerText = "エラー: " + res.message;
+                }
+            } catch (err) {
+                alert("通信エラーが発生しました: " + err.message);
+                statusEl.innerText = "通信エラーが発生しました";
             }
         }
 
@@ -639,8 +940,8 @@
             document.getElementById('cash-change').innerText = "¥" + change.toLocaleString();
         }
 
-        // --- 4. 精算処理 (完了後はメイン画面へ) ---
-        function complete(type) {
+        // --- 4. 精算処理 ---
+        function complete(type, cardResData = null) {
             const totalAmount = parseInt(document.getElementById('sum-total').innerText.replace(/[^0-9]/g, ""));
             const receiveAmount = parseInt(currentCashInput) || 0;
 
@@ -674,6 +975,10 @@
             if (type === 'cash') {
                 html += `<p>お預かり: ¥${receiveAmount.toLocaleString()}</p>`;
                 html += `<p>お釣り: ${document.getElementById('cash-change').innerText}</p>`;
+            } else if (type === 'card' && cardResData) {
+                html += `<br><h3>【カード決済受領書】</h3>`;
+                html += `<p>決済ID: ${cardResData.payId}</p>`;
+                html += `<p>残高: ¥${cardResData.remainingBalance.toLocaleString()}</p>`;
             } else if (type === 'id') {
                 html += `<br><h3>【後払い受領書】</h3>`;
                 html += `<p>決済ID: ${document.getElementById('display-pay-id').innerText}</p>`;
@@ -681,21 +986,29 @@
             }
             
             area.innerHTML = html;
-            showPaymentResult(type, totalAmount, receiveAmount);
+            showPaymentResult(type, totalAmount, receiveAmount, cardResData);
         }
 
-        function showPaymentResult(type, totalAmount, receiveAmount) {
+        function showPaymentResult(type, totalAmount, receiveAmount, cardResData) {
             document.getElementById('cash-panel').style.display = 'none';
+            document.getElementById('card-panel').style.display = 'none';
             document.getElementById('id-panel').style.display = 'none';
+            
             const result = document.getElementById('payment-result-content');
             let resultHtml = `<p>お支払い合計: <strong>¥${totalAmount.toLocaleString()}</strong></p>`;
+            
             if (type === 'cash') {
                 resultHtml += `<p>お預かり: <strong>¥${receiveAmount.toLocaleString()}</strong></p>`;
                 resultHtml += `<p>お釣り: <strong>¥${Math.max(0, receiveAmount - totalAmount).toLocaleString()}</strong></p>`;
+            } else if (type === 'card' && cardResData) {
+                resultHtml += `<p>お支払い方法: <strong>カード決済</strong></p>`;
+                resultHtml += `<p>決済ID: <strong style="color:var(--accent-color);">${cardResData.payId}</strong></p>`;
+                resultHtml += `<p>利用後残高: <strong style="color:var(--success-color);">¥${cardResData.remainingBalance.toLocaleString()}</strong></p>`;
             } else {
                 resultHtml += `<p>お預かり: <strong>後払い</strong></p>`;
                 resultHtml += `<p>お釣り: <strong>¥0</strong></p>`;
             }
+            
             result.innerHTML = resultHtml;
             document.getElementById('payment-result-panel').style.display = 'block';
             cart = [];
